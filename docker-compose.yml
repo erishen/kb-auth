@@ -1,0 +1,56 @@
+# ============================================================================
+# knowledge/admin —— 集中 ABAC 管理服务（kb-auth）容器编排
+#
+#   docker compose -f work/knowledge/admin/docker-compose.yml up -d --build
+#   → http://127.0.0.1:10097/
+#
+# build context = work/knowledge/（shared/ 与 admin/ 都在其内，见 Dockerfile 头注释）。
+# 端口：容器内 8097；宿主映射 10097（>10000，避开 10094/10095/10096）。
+#
+# 集中身份卷 kb-auth-shared（rw）：
+#   accounts.json / htpasswd.map.json / htpasswd / abac-audit.jsonl
+#   本服务独占写；各项目 ro 挂载同一卷 → HTPASSWD_FILE=/app/kb-shared/htpasswd
+#   （agent-httpd 按 mtime 热重载，改账号免重启全局生效）。
+#
+# ⚠️ 各项目**不要**设 AUTHORITIES_DIR=/app/kb-shared，除非同时准备好本项目的
+#    学段授权表：中央那份 accounts.json 的 stages 用的是 math 词表，chinese 的
+#    学段值是 primary/junior/senior/univ，一份表驱动不了两个项目。现在的模型是
+#    「中央只管身份+角色（HTPASSWD_FILE），学段授权留各项目本地」——见
+#    ONBOARDING.md 与 shared/abac.lume 头部「路径约定（v2）」。
+#
+# 接卷前先看 docker logs kb-auth：entrypoint 会报「accounts.json 有 N 个账号、
+# htpasswd 只有 M 个可登录」。当前实测 M=1（只有 admin），差额就是没补齐哈希，
+# 直接挂卷会让项目里的 xiao/zhong/gao/jiao 全部登不进去。
+# ============================================================================
+
+name: kb-admin
+
+services:
+  kb-auth:
+    build:
+      context: ..                # work/knowledge/（含 shared/ + admin/）
+      dockerfile: admin/docker/Dockerfile
+    image: kb-admin:latest
+    container_name: kb-auth
+    ports:
+      # 只绑回环：kb-auth 管的是全族账号与审计，且没有任何局域网消费方
+      # （全仓 grep 10097 只有本仓文档自己）。容器内 agent-httpd 仍监听
+      # 0.0.0.0:8097 —— bridge 网络要转发，收窄只加宿主层前缀。
+      # 真要手机访问中央后台，显式 HOST_BIND=0.0.0.0 并在这里补上理由。
+      - "${HOST_BIND:-127.0.0.1}:${DOCKER_PORT:-10097}:8097"
+    # 首启 bootstrap htpasswd 用的 admin 密码（map 已存在则忽略，保留在线改的账号）。
+    # 默认值刻意留空：留空 → entrypoint 生成随机密码并打印到 docker logs，
+    # 比原来写死的 admin123 安全（原来是"忘了改就等于全网弱口令"）。
+    # ⚠️ 改这里**不会**改已存在卷里的密码（走 map 分支），改现存口令请用 API：
+    #   PUT /api/accounts/admin（见 ONBOARDING「口令」节）。
+    environment:
+      LUME_AUTH_USER: "${LUME_AUTH_USER:-admin}"
+      LUME_AUTH_PASSWORD: "${LUME_AUTH_PASSWORD:-}"
+    volumes:
+      - kb-auth-shared:/app/kb-shared
+    restart: unless-stopped
+
+volumes:
+  kb-auth-shared:
+    name: kb-auth-shared      # 显式全局卷名 → math/chinese compose 可共享同一份身份
+    driver: local

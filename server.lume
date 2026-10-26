@@ -1,0 +1,232 @@
+// knowledge/admin/server.lume —— 集中 ABAC 管理服务（独立容器，宿主 10097）
+//
+// 职责（管理面集中，数据面仍各项目本地）：
+//   - 账号 CRUD（accounts.json，含 SHA-512 密码哈希）+ 生成/维护 htpasswd
+//   - 集中审计（abac-audit.jsonl）
+//   - 跨项目决策 API：POST /api/authorize（用 resources.json 里登记的项目资源表
+//     + 中央身份表跑 shared/abac.decide_with，给聚合鉴权 / 审计回放 / 排障用）
+//   - 资源表注册：data/resources.json（各项目的 RESOURCES 收口，接新项目只加条目）
+//
+// 决策引擎 / 账号引擎 / JSON 解析全部 import ../shared（与 math/chinese 同一份
+// 事实源）；本文件只做「集中服务」的路由与资源表注册。
+//
+//   make dev      → http://127.0.0.1:8097
+//   make docker   → 宿主 http://127.0.0.1:10097（见 docker-compose.yml DOCKER_PORT）
+//
+// 与项目的关系（重要，别搞反）：
+//   - 各项目**不会**把 decide() 委托到本服务的 HTTP 端点。决策仍在项目进程本地
+//     跑（零网络，见 ONBOARDING「不变的部分」）。这里没有、也不该加
+//     「设个 env 就走 /api/authorize」的开关——那会让每次页面请求多一跳 RPC，
+//     并把中央变成全站单点。/api/authorize 是给跨项目查询/审计用的旁路。
+//   - 本服务对项目的实际影响只有一个：写 kb-auth-shared 卷里的 htpasswd，
+//     项目 ro 挂该卷并设 HTPASSWD_FILE 后，agent-httpd 按 mtime 热重载即生效。
+//     学段授权（stages）不在这里，仍在各项目本地 accounts.json——各项目词表不同
+//     （math=primary-math/…，chinese=primary/junior/…），一份中央表驱动不了。
+//     两层怎么合并见 shared/abac.lume 头部「路径约定（v2）」。
+//   - 因此本服务自身**绝不能**设 AUTHORITIES_DIR（它就是身份权威）。设了的话
+//     shared/admin.lume 的写保护会让所有账号 CRUD 变成 501，故下面在加载期
+//     直接报错提示。
+import "../shared/abac.lume" as abac;
+import "../shared/admin.lume" as adm;
+
+server {
+  port = 8097;
+  workers = 2;
+  docroot = "./www";
+  htpasswd = env("HTPASSWD_FILE");
+}
+
+if (abac.central_mode()) {
+  print("错误: kb-auth 自身不该设 AUTHORITIES_DIR（身份权威就是本服务）；"
+        + "设了会导致账号 CRUD 全部 501。请从 docker-compose.yml 移除该项。");
+}
+
+// 资源表注册：各项目的 RESOURCES 收口在 data/resources.json（改 JSON 即时生效，
+// 不用重建镜像）；下面的表只是「JSON 读不到时」的兜底副本，两段得手工保持同步
+// ——没法自动比对（server.lume 会起服务、不能被测试脚本 import），所以兜底生效时
+// 会打日志，且 GET /api/resources 会回 from_file=false，漂移至少是看得见的。
+// 与各项目 lib/access.lume 的 configure({resources}) 保持一致。
+let FALLBACK_RESOURCES = {
+  math: {
+    stage:    { actions: ["read"], min_role: "student" },
+    practice: { actions: ["read"], min_role: "student" },
+    chat:     { actions: ["read"], min_role: "student" },
+    admin:    { actions: ["manage"], min_role: "admin" },
+    paper:    { actions: ["manage", "read"], min_role: "teacher" },
+  },
+  chinese: {
+    data:  { actions: ["read"], min_role: "student" },
+    admin: { actions: ["manage"], min_role: "admin" },
+  },
+};
+// 各项目的学段资源名（decide 第 6 步白名单检查）
+let FALLBACK_STAGE = {
+  math: "stage",
+  chinese: "",   // chinese 学段门控走 ?stage= 路由，不在 decide 第 6 步
+};
+
+// 读 data/resources.json（读不到 / 解析失败 → null，调用方回落兜底表）。
+func read_registry_file() {
+  let raw = read_file("data/resources.json");
+  if (raw == null) { return null; }
+  let r = try(() => json(raw));
+  if (get(r, "err", null) != null) {
+    print("警告: data/resources.json 解析失败，回落代码内置资源表");
+    return null;
+  }
+  return get(r, "ok", {});
+}
+
+// 某项目的有效资源表。
+//
+// 这里以前有两处不一致，是抽离过程留下的坑，现在一起收口：
+//   1) resources_for() 读 JSON、stage_for() 只看硬编码表 → 只在 JSON 里登记了
+//      学段资源名的项目，decide 第 6 步白名单永远不生效（静默放宽，不报错）；
+//   2) GET /api/resources 回的是硬编码那份 → 改了 JSON 之后，「看注册了什么」
+//      的接口和真正参与决策的表已经不是同一份数据。
+func resources_for(project) {
+  let reg = read_registry_file();
+  if (reg == null) { return get(FALLBACK_RESOURCES, project, {}); }
+  let hit = get(get(reg, "projects", {}), project, null);
+  if (hit != null) { return hit; }
+  return get(FALLBACK_RESOURCES, project, {});
+}
+
+// 某项目的学段资源名（空串 = 该项目不按学段判）。
+func stage_for(project) {
+  let reg = read_registry_file();
+  if (reg == null) { return str(get(FALLBACK_STAGE, project, "")); }
+  let hit = get(get(reg, "stage_resource", {}), project, null);
+  if (hit != null) { return str(hit); }
+  return str(get(FALLBACK_STAGE, project, ""));
+}
+
+// 有效视图：把「JSON 优先 + 代码兜底」算出来的结果原样暴露，并逐项标出这一项
+// 到底来自哪份表（file / fallback / both）——排查时不用猜哪份在生效。
+func effective_registry() {
+  let names = {};
+  let reg = read_registry_file();
+  let ks = keys(FALLBACK_RESOURCES);
+  let i = 0;
+  while (i < len(ks)) { put(names, get(ks, i), 1); i = i + 1; }
+  if (reg != null) {
+    let pks = keys(get(reg, "projects", {}));
+    let j = 0;
+    while (j < len(pks)) { put(names, get(pks, j), 1); j = j + 1; }
+  }
+  let out = {};
+  let all = keys(names);
+  let k = 0;
+  while (k < len(all)) {
+    let p = get(all, k);
+    let in_file = reg != null and get(get(reg, "projects", {}), p, null) != null;
+    let in_code = get(FALLBACK_RESOURCES, p, null) != null;
+    let src = "fallback";
+    if (in_file and in_code) { src = "file"; }
+    if (in_file and not in_code) { src = "file-only"; }
+    put(out, p, {
+      resources: resources_for(p),
+      stage_resource: stage_for(p),
+      source: src,
+    });
+    k = k + 1;
+  }
+  return { projects: out, from_file: reg != null };
+}
+
+func parse_body(req) {
+  let body = get(req, "body", "");
+  if (str(body) == "") { return {}; }
+  let r = try(() => json(body));
+  if (get(r, "err", null) != null) { return {}; }
+  return get(r, "ok", {});
+}
+
+// 管理门：admin 服务的写端点需登录（Basic Auth 开启时当前 user 必须 role=admin）。
+// 认证关闭（本机 make dev）时 user=null → 放行，便于本地联调。
+func admin_guard(req) {
+  let user = abac.current_user(req);
+  if (user == null) { return null; }
+  let rec = abac.subject_of(user);
+  if (rec == null or str(get(rec, "role", "student")) != "admin") {
+    return { status: 403, body: { err: "无权限（需要 admin 角色）" } };
+  }
+  return null;
+}
+
+get "/api/health", (req) => {
+  return { ok: true, service: "kb-admin", engine: "lume-core", when: now() };
+};
+
+// 账号列表（去哈希）。
+get "/api/accounts", (req) => {
+  let g = admin_guard(req);
+  if (g != null) { return g; }
+  let acc = adm.read_accounts();
+  if (acc == null) { return { status: 500, body: { err: "账号文件不可读" } }; }
+  return { accounts: adm.accounts_list(acc) };
+};
+
+// 新增账号。
+post "/api/accounts", (req) => {
+  let g = admin_guard(req);
+  if (g != null) { return g; }
+  let user = abac.current_user(req);
+  return adm.account_create(user, parse_body(req));
+};
+
+// 更新账号属性 / 重置密码。
+put "/api/accounts/:user", (req) => {
+  let g = admin_guard(req);
+  if (g != null) { return g; }
+  let user = abac.current_user(req);
+  return adm.account_update(user, get(req, "params", {}).user, parse_body(req));
+};
+
+// 删除账号（admin 不可删）。
+delete "/api/accounts/:user", (req) => {
+  let g = admin_guard(req);
+  if (g != null) { return g; }
+  let user = abac.current_user(req);
+  return adm.account_delete(user, get(req, "params", {}).user);
+};
+
+// 集中审计日志。
+get "/api/audit", (req) => {
+  let g = admin_guard(req);
+  if (g != null) { return g; }
+  return { logs: adm.audit_raw() };
+};
+
+// 资源表（管理/调试：看各项目**实际生效**的注册表，含每项来自 JSON 还是代码兜底）。
+// 以前这里回的是代码里的硬编码表，改了 data/resources.json 之后它会和
+// /api/authorize 用的表不一致——排查时被误导。
+get "/api/resources", (req) => {
+  return effective_registry();
+};
+
+// 集中决策 API：POST {project, user, res, action, stage}
+// 用该项目资源表 + 共享账号表跑 decide_with（跨项目，供委托 / 聚合审计）。
+// 认证关闭时 user=null → PERMIT（与本地引擎一致）。
+post "/api/authorize", (req) => {
+  let payload = parse_body(req);
+  let project = str(get(payload, "project", ""));
+  let user = get(payload, "user", null);
+  let res = str(get(payload, "res", ""));
+  let action = str(get(payload, "action", "read"));
+  let stage = str(get(payload, "stage", ""));
+  if (project == "" or res == "") {
+    return { status: 400, body: { err: "缺 project / res 字段" } };
+  }
+  let table = resources_for(project);
+  let sres = stage_for(project);
+  let d = abac.decide_with(user, res, action, stage, table, sres);
+  return {
+    project: project,
+    user: user,
+    decision: get(d, "decision", ""),
+    reason: get(d, "reason", ""),
+  };
+};
+
+run();

@@ -1,0 +1,112 @@
+name: check
+
+# ⚠️ 生效前提（先读这段）
+# 本文件现在是**惰性**的：`work/knowledge/admin/` 目前不是 git 仓（同 `shared/`），
+# 没有远端就没有 Actions。写在这里是等建仓后直接可用，别把它当"CI 已经在跑"。
+#
+# 路径假设：repo 根同时包含 `shared/` 与 `admin/` 两个兄弟目录。
+# 为什么必须这样：admin/server.lume 是 `import "../shared/abac.lume"`，
+# 单独把 admin 抽成一个仓就会让这句 import 找不到文件（本机是
+# work/knowledge/{shared,admin} 的兄弟布局，正是这个结构）。
+# 若最终选了别的拓扑（例如 knowledge 整族 monorepo），把下面两个 job 的
+# `-C shared` / `-C admin` 前缀改掉即可，步骤本身不变。
+# 拓扑三选一的决定依据：work/knowledge/REPO-TOPOLOGY.md（决策表，含每条判据的实测
+# 证据；建仓后应并入仓根 README 或移到仓内，所以这里不写相对路径，避免建仓后变断链）
+# 口径同步：文档（../shared/README.md、ONBOARDING.md）↔ 本 workflow ↔ 测试脚本
+# 三处必须一致，别各说各话。
+#
+# 分工依据（10-23 定）：`make check` 全程不依赖 docker，可在 CI 直接跑；
+# 依赖 docker 的 entrypoint 测试单开 job，不混进 check。
+#   engine     → make -C shared check + make -C admin check（85 条引擎断言 + type-check）
+#   entrypoint → make -C admin entrypoint-test（要基座镜像，跑在 docker job 里）
+#
+# 已在本机验证 vs 仍属 CI 推断（别混）：
+#   ✅ 已验：`env -i make -s -C shared check LUME_DIR=<abs>` → 54 PASS、退 0
+#   ✅ 已验：`make -C admin check LUME_DIR=<abs>` → 子 make 能继承命令行变量（54 PASS）
+#   ✅ 已验：lume 的 docker/Dockerfile 是自足多阶段（debian 内 make all → scratch），
+#            所以 docker job 不需要 apt、不需要宿主先 make
+#   ✅ 已验：entrypoint-test 不碰 bin/lume（它把 `exec "$@"` 换成了 echo、参数给 /bin/true）
+#   ⚠️ 推断：apt 包清单与 `make -j4` 借自 erishen/lume 的 release.yml，未在本仓 CI 跑过
+#   ⚠️ 推断：runner 是 amd64，build 出来的基座是 amd64（本机是 arm64）；测试只用
+#            /bin/sh 与 busybox applet，理论上跨架构无碍，但没实测
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────
+  # engine：无 docker。跑 ABAC 引擎的四套断言（local/central/corrupt/grants，85 条）+ type-check
+  # ───────────────────────────────────────────────────────────────────────
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 引擎是 .lume 源码，但单测要有个能跑它的二进制。erishen/lume 是 public 仓，
+      # 直接检出到仓内子目录（不往 workspace 外写，Actions 对 `path: ../x` 不可靠），
+      # 再用 LUME_DIR 指过去——shared/ 与 admin/ 的 Makefile 都是 `LUME_DIR ?=`，
+      # 命令行变量会被子 make 继承（本机已验）。
+      - name: Check out erishen/lume (public) for the bin/lume build
+        # submodules 是必须的：erishen/lume 带子模块 agent-httpd（实测 .gitmodules），
+        # 不拉下来源码树不全、make 必挂。上游 release.yml 用的就是 recursive。
+        uses: actions/checkout@v4
+        with:
+          repository: erishen/lume
+          path: _deps/lume
+          submodules: recursive
+
+      # 包清单抄自 erishen/lume 的 release.yml：libcrypt-dev 是 crypt_sha512 的来源，
+      # libsqlite3-dev / m4 是 make all 的硬依赖，缺一个就整仓编不出来。
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libcrypt-dev m4
+
+      - name: Build bin/lume
+        working-directory: _deps/lume
+        run: make -j4
+
+      # 刻意不带 entrypoint-test：那个要 docker，属于下面那个 job。
+      # 两条都必须显式给 LUME_DIR —— 仓内没有 work/lume 这个兄弟目录，
+      # Makefile 的默认值 ../../lume/lume 只在本地开发机成立。
+      - name: ABAC engine tests + type-check
+        run: |
+          make -C shared check LUME_DIR="$GITHUB_WORKSPACE/_deps/lume"
+          make -C admin check LUME_DIR="$GITHUB_WORKSPACE/_deps/lume"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # entrypoint：唯一依赖 docker 的 job。测的是 kb-auth 的 docker/entrypoint.sh，
+  # 它跑在 scratch+busybox 里，宿主 macOS 复现不了（busybox applet 集合与 BSD
+  # 用户态都不同），只能进容器测。
+  # ───────────────────────────────────────────────────────────────────────
+  entrypoint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: erishen/lume
+          path: _deps/lume
+          submodules: recursive   # 同 engine job：缺子模块则基座镜像构建必挂
+
+      - name: Build the lume base image
+        working-directory: _deps/lume
+        # tag 从 admin/docker/Dockerfile 的 FROM 行反推，不在 workflow 里再写死一份——
+        # 否则升级 FROM 之后，这个 job 还在拿旧基座测，测了个寂寞。
+        # （entrypoint-test 自己也是同一套反推，两边同源。）
+        run: |
+          TAG="$(sed -n 's/^FROM lume:\([^[:space:]]*\).*/\1/p' \
+            "$GITHUB_WORKSPACE/admin/docker/Dockerfile" | head -1)"
+          test -n "$TAG" || { echo "admin/docker/Dockerfile 缺 FROM lume:<tag>"; exit 1; }
+          echo "==> 构建基座 lume:$TAG"
+          make image IMAGE_REPO=lume IMAGE_TAG="$TAG"
+
+      - name: Entrypoint behaviour tests (in container)
+        run: make -C admin entrypoint-test
+
+      # 注意：项目 entrypoint 的「让位分支」测试（make -C admin yield-test PROJ=math）
+      # 故意**不在这里跑**，也不挂进 check —— 它需要 math:latest / chinese:latest 镜像在
+      # 本地存在，而这两个镜像在当前仓结构下 CI 里根本构建不出来（chinese 仓不含 shared/，
+      # 见 ../REPO-TOPOLOGY.md 的实测：该仓跟踪的 shared 文件数 = 0）。
+      # 所以它是「本地巡逻」项：改了 chinese/math 的 entrypoint 后手工跑一次，
+      # 别误以为 CI 已经覆盖它。
