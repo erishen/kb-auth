@@ -1,18 +1,27 @@
 # knowledge/admin —— 集中 ABAC 管理服务（kb-auth）
 #
 # 依赖：
-#   共享引擎 ../shared/*.lume（与 math/chinese 同一事实源）
-#   ../../lume/lume 的 bin/lume（未构建：cd ../../lume/lume && make）
+#   共享引擎 ../shared/*.lume（与 math/chinese 同一事实源；公开克隆需 shared 仓同级或 submodule）
+#   lume 工具链（bin/lume）—— 见下方 LUME_DIR 解析逻辑
 #
 # 常用：
-#   make dev       宿主起服务 → http://127.0.0.1:8097（需 ../../lume/lume/bin/lume）
+#   make dev       宿主起服务 → http://127.0.0.1:8097（需 lume 工具链）
 #   make check     宿主 type-check server.lume + 共享引擎单测
 #   make test      共享引擎单测 + 容器内 entrypoint 行为测（后者要 docker）
 #   make docker    容器化构建 + 后台启动 → http://127.0.0.1:10097
 #   make docker-stop  停容器（卷 kb-auth-shared 保留）
 #
+# lume 工具链位置（构建 / 运行 / 单测都需要）。解析优先级：
+#   ① 环境变量或命令行 LUME_DIR（如 `make dev LUME_DIR=/abs/path/to/lume`）；
+#   ② 默认的相对路径 ../../lume/lume 指向「与 lume 源码树同级」的本地布局（维护者开箱即用）；
+#   ③ 若默认路径不存在，自动回退到 PATH 上的 `lume`（公开克隆装好 lume 即可零配置）。
+# 因此无需把 LUME_DIR 写进 .env（make 不读 .env）；覆盖方式请用环境变量或命令行。
 LUME_DIR  ?= ../../lume/lume
-LUME      := $(LUME_DIR)/bin/lume
+ifeq ($(wildcard $(LUME_DIR)/bin/lume),)
+  LUME      := $(if $(shell command -v lume 2>/dev/null),lume,$(LUME_DIR)/bin/lume)
+else
+  LUME      := $(LUME_DIR)/bin/lume
+endif
 SCRIPT    := server.lume
 SHARED_DIR ?= ../shared
 
