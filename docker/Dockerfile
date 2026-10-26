@@ -5,7 +5,7 @@
 # 一个 lume 单容器：server.lume（集中账号 CRUD + 审计 + 跨项目 /api/authorize）
 # + 共享引擎（shared/*）。基于 lume:v0.8.1（scratch+busybox，math 同款）。
 #
-# build context = work/knowledge/（docker-compose.yml 里 context 设这里，
+# build context = 仓库根（docker-compose.yml 里 context 设这里，
 # dockerfile=admin/docker/Dockerfile），故 shared/ 与 admin/ 都在 context 内。
 #
 # 容器内布局（WORKDIR /app/admin，uid 10001）：

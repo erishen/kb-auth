@@ -101,7 +101,7 @@ run_case "首启 seed 只有 admin（复现历史坑）+ 二次启动幂等" "
 # 用例 2：map 与 accounts 数量一致 → 应报「一致」，且不该再出差值告警
 run_case "map 与 accounts 一致" "
   mkdir -p /app/kbtest
-  printf %s '{\"admin\":\"x\",\"xiao\":\"x\",\"zhong\":\"x\",\"gao\":\"x\",\"jiao\":\"x\"}' > /app/kbtest/htpasswd.map.json
+  printf %s '{\"admin\":\"x\",\"alice\":\"x\",\"bob\":\"x\",\"carol\":\"x\",\"dave\":\"x\"}' > /app/kbtest/htpasswd.map.json
   cp /app/seedtest/data/accounts.json /app/kbtest/accounts.json
   LUME_AUTH_PASSWORD=\"\$PW\" /bin/sh /app/e.sh /bin/true
 " "$OKMSG" "$WARN"

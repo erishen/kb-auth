@@ -1,16 +1,16 @@
 name: check
 
 # ⚠️ 生效前提（先读这段）
-# 本文件现在是**惰性**的：`work/knowledge/admin/` 目前不是 git 仓（同 `shared/`），
+# 本文件现在是**惰性**的：本仓目前没有远端就没有 Actions（同 `shared/` 仓），
 # 没有远端就没有 Actions。写在这里是等建仓后直接可用，别把它当"CI 已经在跑"。
 #
 # 路径假设：repo 根同时包含 `shared/` 与 `admin/` 两个兄弟目录。
 # 为什么必须这样：admin/server.lume 是 `import "../shared/abac.lume"`，
 # 单独把 admin 抽成一个仓就会让这句 import 找不到文件（本机是
-# work/knowledge/{shared,admin} 的兄弟布局，正是这个结构）。
+# shared/ 与 admin/ 兄弟布局，正是这个结构）。
 # 若最终选了别的拓扑（例如 knowledge 整族 monorepo），把下面两个 job 的
 # `-C shared` / `-C admin` 前缀改掉即可，步骤本身不变。
-# 拓扑三选一的决定依据：work/knowledge/REPO-TOPOLOGY.md（决策表，含每条判据的实测
+# 拓扑三选一的决定依据：REPO-TOPOLOGY.md（决策表，含每条判据的实测
 # 证据；建仓后应并入仓根 README 或移到仓内，所以这里不写相对路径，避免建仓后变断链）
 # 口径同步：文档（../shared/README.md、ONBOARDING.md）↔ 本 workflow ↔ 测试脚本
 # 三处必须一致，别各说各话。
@@ -66,7 +66,7 @@ jobs:
         run: make -j4
 
       # 刻意不带 entrypoint-test：那个要 docker，属于下面那个 job。
-      # 两条都必须显式给 LUME_DIR —— 仓内没有 work/lume 这个兄弟目录，
+      # 两条都必须显式给 LUME_DIR —— 仓内没有 lume 源码这个兄弟目录，
       # Makefile 的默认值 ../../lume/lume 只在本地开发机成立。
       - name: ABAC engine tests + type-check
         run: |
@@ -104,9 +104,9 @@ jobs:
       - name: Entrypoint behaviour tests (in container)
         run: make -C admin entrypoint-test
 
-      # 注意：项目 entrypoint 的「让位分支」测试（make -C admin yield-test PROJ=math）
-      # 故意**不在这里跑**，也不挂进 check —— 它需要 math:latest / chinese:latest 镜像在
-      # 本地存在，而这两个镜像在当前仓结构下 CI 里根本构建不出来（chinese 仓不含 shared/，
-      # 见 ../REPO-TOPOLOGY.md 的实测：该仓跟踪的 shared 文件数 = 0）。
-      # 所以它是「本地巡逻」项：改了 chinese/math 的 entrypoint 后手工跑一次，
+      # 注意：项目 entrypoint 的「让位分支」测试（make -C admin yield-test PROJ=<site>）
+      # 故意**不在这里跑**，也不挂进 check —— 它需要 <consumer>:latest 镜像在
+      # 本地存在，而这类镜像在当前仓结构下 CI 里根本构建不出来（消费方仓不含 shared/，
+      # 见 REPO-TOPOLOGY.md 的实测：该仓跟踪的 shared 文件数 = 0）。
+      # 所以它是「本地巡逻」项：改了消费方 entrypoint 后手工跑一次，
       # 别误以为 CI 已经覆盖它。

@@ -7,3 +7,7 @@ logs/
 .DS_Store
 *.swp
 *~
+
+# ===== 内部运维手册 / 线上迁移脚本（含真实容器名与仓库路径，不公开）=====
+ONBOARDING.md
+tools/migrate-central-auth.sh

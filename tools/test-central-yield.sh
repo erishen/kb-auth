@@ -16,9 +16,9 @@
 # 为什么不重建镜像就能测：把新脚本 ro 挂进去覆盖调用，只读宿主、容器 --rm。
 #
 # 跑法：
-#   sh work/knowledge/admin/tools/test-central-yield.sh math
-#   sh work/knowledge/admin/tools/test-central-yield.sh chinese
-#   （或 make -C work/knowledge/admin yield-test）
+#   sh tools/test-central-yield.sh <site>
+#   sh tools/test-central-yield.sh <site>
+#   （或 make yield-test）
 #
 # ⚠️ 只适用于「容器内可写目录是 /app、以 uid 10001 运行」的 lume 系镜像；
 #    history/medical-stats 的镜像布局不同，接入时再补各自的用例。
