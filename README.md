@@ -1,9 +1,8 @@
 # kb-auth — centralized authentication & audit service
 
-The **central identity authority** for the knowledge product family (`math`, `chinese`,
-`history`, `medical-stats`). It owns who can log in and what role they hold, and exposes a
-cross-project authorization endpoint backed by the shared ABAC engine
-([`kb-auth-shared`](../kb-auth-shared)).
+The **central identity authority** for a family of content sites. It owns who can log in
+and what role they hold, and exposes a cross-project authorization endpoint backed by the
+shared ABAC engine ([`kb-auth-shared`](../kb-auth-shared)).
 
 > Internal onboarding / operations notes (account migration, volume wiring, code-vs-prod
 > mapping) live in [`ONBOARDING.md`](ONBOARDING.md). This README is the public-facing overview.
@@ -29,7 +28,7 @@ cross-project authorization endpoint backed by the shared ABAC engine
                     │
    read-only mount  │  kb-auth-shared volume
                     ▼
-   math / chinese / history  ── local STATE_DIR/accounts.json (per-project stage grants)
+   content sites  ── local STATE_DIR/accounts.json (per-project stage grants)
 ```
 
 Each site binds the `kb-auth-shared` volume read-only and runs the **same** `abac.lume`

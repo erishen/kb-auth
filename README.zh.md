@@ -1,6 +1,6 @@
 # kb-auth — 集中身份认证与审计服务
 
-knowledge 产品族（`math`、`chinese`、`history`、`medical-stats`）的**中央身份权威**。
+一组内容站点的**中央身份权威**。
 它掌握"谁能登录"以及"是什么角色"，并基于共享 ABAC 引擎
 （[`kb-auth-shared`](../kb-auth-shared)）对外提供跨项目鉴权端点。
 
@@ -27,7 +27,7 @@ knowledge 产品族（`math`、`chinese`、`history`、`medical-stats`）的**�
                     │
    只读挂载  │  kb-auth-shared 卷
                     ▼
-   math / chinese / history  ── 本地 STATE_DIR/accounts.json (各项目学段授权)
+   内容站点  ── 本地 STATE_DIR/accounts.json (各项目学段授权)
 ```
 
 每个站点把 `kb-auth-shared` 卷只读挂入，并运行**同一份** `abac.lume` 引擎；`kb-auth`
