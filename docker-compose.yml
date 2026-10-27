@@ -13,8 +13,8 @@
 #   （agent-httpd 按 mtime 热重载，改账号免重启全局生效）。
 #
 # ⚠️ 各项目**不要**设 AUTHORITIES_DIR=/app/kb-shared，除非同时准备好本项目的
-#    学段授权表：中央那份 accounts.json 的 stages 用的是 math 词表，chinese 的
-#    学段值是 primary/junior/senior/univ，一份表驱动不了两个项目。现在的模型是
+#    学段授权表：各消费方的学段词表互不相同（词表 A=stage-a/…，词表 B=stage-b/
+#    stage-c/…），一份中央表驱动不了多个项目。现在的模型是
 #    「中央只管身份+角色（HTPASSWD_FILE），学段授权留各项目本地」——见
 #    ONBOARDING.md 与 shared/abac.lume 头部「路径约定（v2）」。
 #
@@ -56,5 +56,5 @@ services:
 
 volumes:
   kb-auth-shared:
-    name: kb-auth-shared      # 显式全局卷名 → math/chinese compose 可共享同一份身份
+    name: kb-auth-shared      # 显式全局卷名 → 各消费方 compose 可共享同一份身份
     driver: local

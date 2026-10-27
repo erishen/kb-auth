@@ -1,7 +1,7 @@
 # knowledge/kb-auth —— 集中 ABAC 管理服务（kb-auth）
 #
 # 依赖：
-#   共享引擎 ../shared/*.lume（与 math/chinese 同一事实源；公开克隆需 shared 仓同级或 submodule）
+#   共享引擎 ../shared/*.lume（与各消费方同一事实源；公开克隆需 shared 仓同级或 submodule）
 #   lume 工具链（bin/lume）—— 见下方 LUME_DIR 解析逻辑
 #
 # 常用：
@@ -31,7 +31,7 @@ dev:
 	@echo "==> 集中 ABAC 管理服务启动于 http://127.0.0.1:8097"
 	@$(LUME) $(SCRIPT)
 
-# 引擎是被本项目和 math/chinese 共用的一份实现，改这里必须过它的单测：
+# 引擎是被本服务和各消费方共用的一份实现，改这里必须过它的单测：
 # local / central / corrupt / grants 四套环境各跑一遍（见 ../shared/Makefile 头注释）。
 engine-test:
 	@$(MAKE) --no-print-directory -C $(SHARED_DIR) test
@@ -40,12 +40,12 @@ engine-test:
 entrypoint-test:
 	@sh tools/test-entrypoint.sh
 
-# 验「项目 entrypoint 的集中身份让位分支」（默认 math；用法：make yield-test PROJ=chinese）。
+# 验「项目 entrypoint 的集中身份让位分支」（默认 project-a；用法：make yield-test PROJ=project-b）。
 # 拿新脚本 ro 挂进各自镜像跑，不重建镜像、不碰在线容器。
-# ⚠️ 故意**不**挂进 check，也暂时进不了 CI：它要 math:latest / chinese:latest 镜像在本地，
-#    而那两个镜像在当前仓结构下 CI 里构建不出来（chinese 仓不含 shared/，见
+# ⚠️ 故意**不**挂进 check，也暂时进不了 CI：它要消费方的镜像在本地，
+#    而这些镜像在消费方仓结构下 CI 里构建不出来（消费方仓不含 shared/，见
 #    ../REPO-TOPOLOGY.md）。所以它是"本地巡逻"项，不是 CI 项——别为了跑它去给 check 加容器前置。
-PROJ ?= math
+PROJ ?= project-a
 yield-test:
 	@sh tools/test-central-yield.sh $(PROJ)
 

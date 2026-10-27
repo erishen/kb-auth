@@ -11,3 +11,5 @@ logs/
 # ===== 内部运维手册 / 线上迁移脚本（含真实容器名与仓库路径，不公开）=====
 ONBOARDING.md
 tools/migrate-central-auth.sh
+# 依赖本地仓库布局（含具体项目名与同级目录路径），属本地巡逻工具，不随仓库公开
+tools/test-central-yield.sh
