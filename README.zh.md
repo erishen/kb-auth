@@ -2,7 +2,7 @@
 
 一组内容站点的**中央身份权威**。
 它掌握"谁能登录"以及"是什么角色"，并基于共享 ABAC 引擎
-（[`kb-auth-shared`](../kb-auth-shared)）对外提供跨项目鉴权端点。
+（[`kb-auth-shared`](https://github.com/erishen/kb-auth-shared)）对外提供跨项目鉴权端点。
 
 > 内部 onboarding / 运维笔记（账号迁移、卷挂载、代码-vs-线上对照）在
 > [`ONBOARDING.md`](ONBOARDING.md)。本 README 是面向公开仓库的概览。
@@ -32,7 +32,7 @@
 
 每个站点把 `kb-auth-shared` 卷只读挂入，并运行**同一份** `abac.lume` 引擎；`kb-auth`
 是唯一写入方。决策模型（两层：身份归中央、学段授权留本地）详见
-[`kb-auth-shared` README](../kb-auth-shared#两层模型身份归中央学段授权留本地)。
+[`kb-auth-shared` README](https://github.com/erishen/kb-auth-shared#两层模型身份归中央学段授权留本地)。
 
 ## 仓库结构
 
@@ -46,6 +46,45 @@
 | `examples/accounts.example.json` | 起始用的空身份表 |
 
 ## 快速开始
+
+### 1. 把引擎克隆到同级目录
+
+`server.lume` 写的是 `import "../shared/abac.lume"`，所以引擎必须与本仓**同级**，
+而不是塞在仓内：
+
+```sh
+mkdir kb && cd kb
+git clone https://github.com/erishen/kb-auth.git
+git clone https://github.com/erishen/kb-auth-shared.git shared   # ← 目录名必须是 shared
+```
+
+得到：
+
+```
+kb/
+├── kb-auth/     ← 本仓
+└── shared/      ← kb-auth-shared，克隆为 shared
+```
+
+> 跳过这步，`make check` / `make docker` 会报 `../shared: No such file or directory`。
+> `kb-auth-shared` 刻意不做成本仓的 submodule：同一份引擎被多个仓共用，各自锁自己的版本。
+
+### 2. 前置条件
+
+- [`lume`](https://github.com/erishen/lume) 运行时（单个静态二进制）。装官方 release：
+
+  ```sh
+  VER=v0.11.0
+  curl -fsSL -o /tmp/lume.tar.gz \
+    "https://github.com/erishen/lume/releases/download/$VER/lume-linux-x64.tar.gz"
+  tar -xzf /tmp/lume.tar.gz && sudo install -m755 lume-linux-x64/bin/lume /usr/local/bin/lume
+  lume --version
+  ```
+
+  查找顺序：`LUME=/abs/path` → `PATH` 上的 `lume` → `../../lume/lume/bin/lume`（本地布局）。
+  都找不到时构建会直接停下并给出提示，而不是抛一个看不懂的报错。
+
+- Docker 只有 `make docker` 和 `make entrypoint-test` 需要；`make check` 与 `make dev` 都不需要。
 
 ### 前置条件
 

@@ -25,7 +25,7 @@ endif
 SCRIPT    := server.lume
 SHARED_DIR ?= ../shared
 
-.PHONY: dev check test engine-test entrypoint-test yield-test docker docker-stop
+.PHONY: dev check test engine-test entrypoint-test yield-test docker docker-stop check-shared
 
 dev:
 	@echo "==> 集中 ABAC 管理服务启动于 http://127.0.0.1:8097"
@@ -33,7 +33,20 @@ dev:
 
 # 引擎是被本服务和各消费方共用的一份实现，改这里必须过它的单测：
 # local / central / corrupt / grants 四套环境各跑一遍（见 ../shared/Makefile 头注释）。
-engine-test:
+# 引擎在兄弟目录里（不是 submodule）：缺失时给出可操作提示，而不是
+# "make: *** ../shared: No such file or directory"。
+check-shared:
+	@if [ ! -f $(SHARED_DIR)/abac.lume ]; then \
+	  echo "==> 找不到共享引擎 $(SHARED_DIR)/abac.lume"; \
+	  echo "    server.lume 写的是 import \"../shared/abac.lume\"，引擎必须与本仓**同级**："; \
+	  echo "      mkdir -p kb && cd kb"; \
+	  echo "      git clone https://github.com/erishen/kb-auth.git"; \
+	  echo "      git clone https://github.com/erishen/kb-auth-shared.git shared"; \
+	  echo "    （目录名必须是 shared）"; \
+	  exit 1; \
+	fi
+
+engine-test: check-shared
 	@$(MAKE) --no-print-directory -C $(SHARED_DIR) test
 
 # entrypoint 跑在 scratch+busybox 里，宿主 macOS 复现不了，只能进容器测。
