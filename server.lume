@@ -225,7 +225,10 @@ post "/api/authorize", (req) => {
   }
   let table = resources_for(project);
   let sres = stage_for(project);
-  let d = abac.decide_with(user, res, action, stage, table, sres);
+  // env_ctx 传 {} 让引擎按当前时间取环境事实（decide_with 的第 7 个参数）。
+  // 本服务的 /api/authorize 是跨项目聚合查询，不需要演示用的「指定小时」入口，
+  // 故不像 kb-abac 那样暴露 hour 入参。
+  let d = abac.decide_with(user, res, action, stage, table, sres, {});
   return {
     project: project,
     user: user,
