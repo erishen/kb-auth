@@ -25,9 +25,26 @@ endif
 SCRIPT    := server.lume
 SHARED_DIR ?= ../shared
 
+# lume 没解析到可执行文件时，给出可操作提示并中止。
+# 没有这层守卫时，$(LUME) 会原样展开成一个不存在的路径，引擎单测子 make
+# 的输出里一条 PASS 都没有、却因为 grep 不到 FAIL 而报「全部通过」—— 假绿。
+define require_lume
+	@if [ -z "$(LUME)" ] || ! command -v "$(LUME)" >/dev/null 2>&1; then \
+	  echo "==> 找不到 lume 运行时（解析结果：$(or $(LUME),空)）"; \
+	  echo "    装官方 release 二进制："; \
+	  echo "      VER=v0.11.0"; \
+	  echo "      curl -fsSL -o /tmp/lume.tar.gz \\"; \
+	  echo "        https://github.com/erishen/lume/releases/download/\$$VER/lume-linux-x64.tar.gz"; \
+	  echo "      tar -xzf /tmp/lume.tar.gz && sudo install -m755 lume-linux-x64/bin/lume /usr/local/bin/lume"; \
+	  echo "    或用命令行指定：make <target> LUME_DIR=/abs/path/to/lume"; \
+	  exit 1; \
+	fi
+endef
+
 .PHONY: dev check test engine-test entrypoint-test yield-test docker docker-stop check-shared
 
 dev:
+	$(call require_lume)
 	@echo "==> 集中 ABAC 管理服务启动于 http://127.0.0.1:8097"
 	@$(LUME) $(SCRIPT)
 
@@ -47,6 +64,7 @@ check-shared:
 	fi
 
 engine-test: check-shared
+	$(call require_lume)
 	@$(MAKE) --no-print-directory -C $(SHARED_DIR) test
 
 # entrypoint 跑在 scratch+busybox 里，宿主 macOS 复现不了，只能进容器测。
@@ -63,6 +81,7 @@ yield-test:
 	@sh tools/test-central-yield.sh $(PROJ)
 
 check: engine-test
+	$(call require_lume)
 	@echo "==> type-check server.lume + 共享引擎"
 	@$(LUME) --check $(SCRIPT)
 	@$(LUME) --check $(SHARED_DIR)/abac.lume
