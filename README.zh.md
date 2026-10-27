@@ -1,11 +1,21 @@
 # kb-auth — 集中身份认证与审计服务
 
+> **这是一套三仓库组合**
+>
+> | 仓库 | 职责 |
+> |---|---|
+> | [`kb-auth-shared`](https://github.com/erishen/kb-auth-shared) | ABAC **决策引擎**（纯库：无进程、无网络）。被其余两者 import。 |
+> | [`kb-auth`](https://github.com/erishen/kb-auth) | **中央身份权威** —— 账号 CRUD、密码哈希、`htpasswd`。唯一的写入方。 |
+> | [`kb-abac`](https://github.com/erishen/kb-abac) | **消费方站点** —— 在进程内运行引擎，并展示它如何决策。想先看效果从这里开始。 |
+>
+> 三者关系：站点用共享引擎在**本地**完成授权决策（每次请求零网络），只有*身份*是集中的。
+> 站点从 `kb-auth-shared` 取引擎，可选地以只读方式挂载 `kb-auth` 的卷来获取账号。
+
 一组内容站点的**中央身份权威**。
 它掌握"谁能登录"以及"是什么角色"，并基于共享 ABAC 引擎
 （[`kb-auth-shared`](https://github.com/erishen/kb-auth-shared)）对外提供跨项目鉴权端点。
 
-> 内部 onboarding / 运维笔记（账号迁移、卷挂载、代码-vs-线上对照）在
-> [`ONBOARDING.md`](ONBOARDING.md)。本 README 是面向公开仓库的概览。
+> 迁移与运维的具体步骤由运维侧掌握，不在本仓。本 README 是面向公开仓库的概览。
 
 ## 它做什么
 
