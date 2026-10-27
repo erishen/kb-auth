@@ -1,0 +1,25 @@
+{
+  "projects": {
+    "project-a": {
+      "stage":    { "actions": ["read"], "min_role": "student" },
+      "practice": { "actions": ["read"], "min_role": "student" },
+      "chat":     { "actions": ["read"], "min_role": "student" },
+      "admin":    { "actions": ["manage"], "min_role": "admin" },
+      "paper":    { "actions": ["manage", "read"], "min_role": "teacher" }
+    },
+    "project-b": {
+      "data":  { "actions": ["read"], "min_role": "student" },
+      "admin": { "actions": ["manage"], "min_role": "admin" }
+    },
+    "project-c": {
+      "data":  { "actions": ["read"], "min_role": "student" },
+      "admin": { "actions": ["manage"], "min_role": "admin" }
+    }
+  },
+  "stage_resource": {
+    "project-a": "stage",
+    "project-b": "",
+    "project-c": ""
+  },
+  "comment": "各项目 ABAC 资源表收口（中央认证服务做跨项目决策时使用）。与各消费方 lib/access.lume 的 configure() 一一对应：project-c 的内容 API 全站只读公开（不门控学段），data/read 只服务 /api/perm 决策查询；admin/manage 是其 /api/admin/audit 的门禁。认证面（/react/*、/discovery、/metrics）由中央 htpasswd 直接保护，不经 decide。只需保证与各消费方 configure() 保持一致，新增项目在此追加即可。"
+}

@@ -1,4 +1,4 @@
-# knowledge/admin —— 集中 ABAC 管理服务（kb-auth）
+# knowledge/kb-auth —— 集中 ABAC 管理服务（kb-auth）
 #
 # 依赖：
 #   共享引擎 ../shared/*.lume（与 math/chinese 同一事实源；公开克隆需 shared 仓同级或 submodule）

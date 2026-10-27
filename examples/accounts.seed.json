@@ -1,0 +1,10 @@
+{
+  "accounts": {
+    "admin":  { "role": "admin",   "stages": [], "grade": 12, "title": "管理员（全库）" },
+    "alice":  { "role": "student", "stages": ["stage-a"], "grade": 6, "title": "词表 A 用户" },
+    "bob":    { "role": "student", "stages": ["stage-a", "stage-b"], "grade": 8, "title": "词表 A + B 用户" },
+    "carol":  { "role": "student", "stages": ["stage-a", "stage-b", "stage-c"], "grade": 11, "title": "多学段用户" },
+    "dave":   { "role": "teacher", "stages": ["stage-b", "stage-c"], "grade": 0, "title": "词表 B 教师" }
+  },
+  "comment": "kb-auth 服务的集中账号种子（各消费方共用一份身份）。stages 是学段值白名单——注意各消费方的学段词表互不相同（词表 A 用 stage-a/…，词表 B 用 stage-b/stage-c/…），所以中央的 stages 只作示例、不参与各项目的学段判定（判定用各项目本地授权表）。账号未登记 = fail-closed。本文件随容器 COPY 进镜像；运行时权威在共享卷 kb-auth-shared 的 accounts.json（管理端在线 CRUD 即时生效）。"
+}

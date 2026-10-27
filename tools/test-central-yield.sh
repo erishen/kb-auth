@@ -1,5 +1,5 @@
 #!/bin/sh
-# knowledge/admin/tools/test-central-yield.sh —— 验证各项目 entrypoint 的
+# knowledge/kb-auth/tools/test-central-yield.sh —— 验证各项目 entrypoint 的
 # 「集中身份让位分支」，一份脚本可对任意项目复用。
 #
 # 要验的行为（三条，缺一不可）：

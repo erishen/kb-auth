@@ -1,4 +1,4 @@
-// knowledge/admin/server.lume —— 集中 ABAC 管理服务（独立容器，宿主 10097）
+// knowledge/kb-auth/server.lume —— 集中 ABAC 管理服务（独立容器，宿主 10097）
 //
 // 职责（管理面集中，数据面仍各项目本地）：
 //   - 账号 CRUD（accounts.json，含 SHA-512 密码哈希）+ 生成/维护 htpasswd
@@ -7,7 +7,7 @@
 //     + 中央身份表跑 shared/abac.decide_with，给聚合鉴权 / 审计回放 / 排障用）
 //   - 资源表注册：data/resources.json（各项目的 RESOURCES 收口，接新项目只加条目）
 //
-// 决策引擎 / 账号引擎 / JSON 解析全部 import ../shared（与 math/chinese 同一份
+// 决策引擎 / 账号引擎 / JSON 解析全部 import ../shared（与各消费方同一份
 // 事实源）；本文件只做「集中服务」的路由与资源表注册。
 //
 //   make dev      → http://127.0.0.1:8097
@@ -21,7 +21,7 @@
 //   - 本服务对项目的实际影响只有一个：写 kb-auth-shared 卷里的 htpasswd，
 //     项目 ro 挂该卷并设 HTPASSWD_FILE 后，agent-httpd 按 mtime 热重载即生效。
 //     学段授权（stages）不在这里，仍在各项目本地 accounts.json——各项目词表不同
-//     （math=primary-math/…，chinese=primary/junior/…），一份中央表驱动不了。
+//     （词表 A=stage-a/…，词表 B=stage-b/stage-c/…），一份中央表驱动不了。
 //     两层怎么合并见 shared/abac.lume 头部「路径约定（v2）」。
 //   - 因此本服务自身**绝不能**设 AUTHORITIES_DIR（它就是身份权威）。设了的话
 //     shared/admin.lume 的写保护会让所有账号 CRUD 变成 501，故下面在加载期
@@ -47,22 +47,27 @@ if (abac.central_mode()) {
 // 会打日志，且 GET /api/resources 会回 from_file=false，漂移至少是看得见的。
 // 与各项目 lib/access.lume 的 configure({resources}) 保持一致。
 let FALLBACK_RESOURCES = {
-  math: {
+  "project-a": {
     stage:    { actions: ["read"], min_role: "student" },
     practice: { actions: ["read"], min_role: "student" },
     chat:     { actions: ["read"], min_role: "student" },
     admin:    { actions: ["manage"], min_role: "admin" },
     paper:    { actions: ["manage", "read"], min_role: "teacher" },
   },
-  chinese: {
+  "project-b": {
+    data:  { actions: ["read"], min_role: "student" },
+    admin: { actions: ["manage"], min_role: "admin" },
+  },
+  "project-c": {
     data:  { actions: ["read"], min_role: "student" },
     admin: { actions: ["manage"], min_role: "admin" },
   },
 };
 // 各项目的学段资源名（decide 第 6 步白名单检查）
 let FALLBACK_STAGE = {
-  math: "stage",
-  chinese: "",   // chinese 学段门控走 ?stage= 路由，不在 decide 第 6 步
+  "project-a": "stage",
+  "project-b": "",   // project-b 学段门控走 ?stage= 路由，不在 decide 第 6 步
+  "project-c": "",
 };
 
 // 读 data/resources.json（读不到 / 解析失败 → null，调用方回落兜底表）。

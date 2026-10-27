@@ -1,5 +1,5 @@
 #!/bin/sh
-# knowledge/admin 集中服务 entrypoint（scratch+busybox）
+# knowledge/kb-auth 集中服务 entrypoint（scratch+busybox）
 #
 # 职责：
 #   1. 确保集中身份卷 /app/kb-shared 可写（named volume 首次挂载继承 10001）。

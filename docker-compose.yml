@@ -1,10 +1,10 @@
 # ============================================================================
-# knowledge/admin —— 集中 ABAC 管理服务（kb-auth）容器编排
+# knowledge/kb-auth —— 集中 ABAC 管理服务（kb-auth）容器编排
 #
 #   docker compose up -d --build
 #   → http://127.0.0.1:10097/
 #
-# build context = 仓库根（shared/ 与 admin/ 需同级，见 Dockerfile 头注释）。
+# build context = 上一级目录（shared/ 与 kb-auth/ 需同级，见 Dockerfile 头注释）。
 # 端口：容器内 8097；宿主映射 10097（>10000，避开 10094/10095/10096）。
 #
 # 集中身份卷 kb-auth-shared（rw）：
@@ -28,8 +28,12 @@ name: kb-admin
 services:
   kb-auth:
     build:
-      context: ..                # 仓库根（含 shared/ + admin/）
-      dockerfile: admin/docker/Dockerfile
+      context: ..                # 上一级（含 shared/ 与 kb-auth/）
+      dockerfile: kb-auth/docker/Dockerfile
+      args:
+        # lume 运行时版本（从 GitHub Release 取官方静态二进制）
+        # 可用版本见 https://github.com/erishen/lume/releases
+        LUME_VERSION: ${LUME_VERSION:-v0.11.0}
     image: kb-admin:latest
     container_name: kb-auth
     ports:

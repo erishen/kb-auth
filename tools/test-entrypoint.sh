@@ -1,5 +1,5 @@
 #!/bin/sh
-# admin/tools/test-entrypoint.sh —— 在一次性容器里跑 docker/entrypoint.sh 的副本
+# kb-auth/tools/test-entrypoint.sh —— 在一次性容器里跑 docker/entrypoint.sh 的副本
 #
 # 为什么要专门测它：kb-auth 的 entrypoint 决定「中央卷里到底有哪些账号能登录」，
 # 而它跑在 scratch+busybox 里（没有独立的 wc/head/tr，只能 /bin/busybox xx）。
@@ -9,7 +9,7 @@
 # 里其余账号被静默挡在 htpasswd 外；项目真把这个卷当 HTPASSWD_FILE 挂上去时，表现
 # 成「账号明明在、全部登录失败」，排查成本极高。entrypoint 现在会把差值打出来。
 #
-# 跑法：make -C admin test-entrypoint
+# 跑法：make -C kb-auth entrypoint-test
 #
 # 只读宿主、只写自己的临时目录：SHARED/WORKDIR 被 sed 改到容器内 /tmp 下，
 # 尾行 exec 换成 echo，所以既不碰 kb-auth-shared 真卷也不起服务。
@@ -19,15 +19,33 @@ ADMIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ENTRY="$ADMIN_DIR/docker/entrypoint.sh"
 SEED="$ADMIN_DIR/data/accounts.json"
 
-# 基座镜像 tag 从 Dockerfile 的 FROM 行解析，不在这里再写死一份——否则升级
-# admin/docker/Dockerfile 的 FROM 后，本测试还会拿旧镜像跑得绿（假绿）。
-# 与 ../math/Makefile 的 BASE_IMAGE 同一套做法。
-BASE_IMAGE="$(sed -n 's/^FROM \(lume:[^[:space:]]*\).*/\1/p' "$ADMIN_DIR/docker/Dockerfile" | head -1)"
-if [ -z "$BASE_IMAGE" ]; then
-  echo "docker/Dockerfile 里没有 'FROM lume:*' 行，无法确定该用哪个基座测 entrypoint" >&2
-  exit 1
+# 该用哪个镜像测 entrypoint？
+#
+# 旧做法：从 Dockerfile 的 `FROM lume:*` 行取基座镜像。这依赖「基础镜像里带
+# busybox + 已装好 lume」——而那个基础镜像从未公开分发，外部 clone 必然失败。
+#
+# 现在 Dockerfile 是多阶段构建：lume 从 GitHub Release 取静态二进制，运行层是
+# alpine（自带 busybox/sh，正是 entrypoint 需要的）。所以直接拿**构建产物**测：
+#   IMAGE 显式指定 → 用指定的
+#   否则 → 用 `docker compose build` 出来的 kb-admin:latest
+# 这样测的就是外部分享时会拿到的同一个镜像，而不是一个只存在于本机的基座。
+COMPOSE_FILE="$ADMIN_DIR/docker-compose.yml"
+DEFAULT_IMAGE="kb-admin:latest"
+
+if [ -z "${IMAGE:-}" ]; then
+  IMAGE="$DEFAULT_IMAGE"
+  echo "════════ 构建用于测试的镜像：$IMAGE"
+  if ! docker compose -f "$COMPOSE_FILE" build kb-auth >/dev/null 2>&1; then
+    echo "构建失败：docker compose -f $COMPOSE_FILE build kb-auth" >&2
+    echo "（首次构建需要联网从 GitHub Release 下载 lume 运行时）" >&2
+    exit 1
+  fi
+  # compose build 产出的 tag 以 compose 的 image: 为准，这里不假设，直接查
+  if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    echo "构建后找不到镜像 $IMAGE：请确认 docker-compose.yml 里 image: 的值与本脚本一致" >&2
+    exit 1
+  fi
 fi
-IMAGE="${IMAGE:-$BASE_IMAGE}"
 
 # mktemp 建的私有临时目录（不在任何用户路径下），退出时回收自己造的东西。
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/kb-admin-entrypoint.XXXXXX")"
@@ -55,7 +73,10 @@ grep -q 'SHARED=/app/kbtest' "$TMP/entrypoint.sh" || {
 FAILED_CASES=0
 run_case() {
   echo "════════ 用例：$1"
-  out="$(docker run --rm -e PW="$PW" -v "$TMP:/t:ro" "$IMAGE" /bin/sh -c "
+  # ⚠️ 必须 --entrypoint /bin/sh：正式镜像的 ENTRYPOINT 就是 entrypoint.sh，
+  # 不覆盖的话镜像会先跑一遍真 entrypoint（生成随机密码、写 /app/kb-shared），
+  # 再把我们的测试脚本当参数传给 exec —— 用例前置状态被污染，断言全乱。
+  out="$(docker run --rm --entrypoint /bin/sh -e PW="$PW" -v "$TMP:/t:ro" "$IMAGE" -c "
     set -eu
     mkdir -p /app/seedtest/data
     cp /t/entrypoint.sh /app/e.sh
