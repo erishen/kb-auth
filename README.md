@@ -120,6 +120,12 @@ make check        # type-check server.lume + shared-engine unit tests
 make test         # shared-engine unit tests + entrypoint behavior (latter needs docker)
 ```
 
+> Both fail loudly when lume isn't resolvable — they will *not* report success on an empty
+> run. If you add a `grep FAIL`-style check, pair it with an "at least one PASS" assertion;
+> see
+> [`kb-auth-shared`'s Known pitfalls](https://github.com/erishen/kb-auth-shared#known-pitfalls)
+> for why (this repo was one of the three that got bitten).
+
 ## Configuration
 
 | env | Default | Effect |

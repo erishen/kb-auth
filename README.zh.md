@@ -124,6 +124,11 @@ make check        # type-check server.lume + 共享引擎单测
 make test         # 共享引擎单测 + entrypoint 行为测（后者要 docker）
 ```
 
+> lume 解析不到时这两条都会明确报错，**不会**在空跑时报告成功。若你新增
+> `grep FAIL` 式的判定，请同时断言「至少出现过一条 PASS」；原因见
+> [kb-auth-shared 的「已知坑」](https://github.com/erishen/kb-auth-shared#已知坑)
+> （本仓就是踩过的三处之一）。
+
 ## 配置
 
 | env | 缺省 | 作用 |
