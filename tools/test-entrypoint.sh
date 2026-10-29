@@ -51,6 +51,10 @@ fi
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/kb-admin-entrypoint.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
+# 容器以非 root USER（10001）跑，mktemp 的 0700 目录挂进去读不了；
+# 测试只读宿主文件，把目录放开到 755 即可（文件本身 644）。
+chmod 755 "$TMP"
+
 sed -e 's|^SHARED=/app/kb-shared$|SHARED=/app/kbtest|' \
     -e 's|^WORKDIR=/app/admin$|WORKDIR=/app/seedtest|' \
     -e 's|^exec "\$@"$|echo "[test] STATE_DIR=$STATE_DIR HTPASSWD_FILE=${HTPASSWD_FILE:-<未设>}"|' \
