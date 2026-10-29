@@ -17,7 +17,7 @@ set -eu
 
 ADMIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ENTRY="$ADMIN_DIR/docker/entrypoint.sh"
-SEED="$ADMIN_DIR/data/accounts.json"
+SEED="$ADMIN_DIR/examples/accounts.seed.json"
 
 # 该用哪个镜像测 entrypoint？
 #
